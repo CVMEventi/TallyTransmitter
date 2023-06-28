@@ -1,0 +1,6 @@
+.pio
+.vscode
+.idea
+CMakeListsPrivate.txt
+cmake-build-*/
+.DS_Store
