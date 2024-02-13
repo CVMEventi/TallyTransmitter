@@ -6,10 +6,11 @@
 #include "constants.h"
 #include "utils.h"
 #include "tally-read.h"
+#include "Wire.h"
 
 /* Devices Setup */
-//U8G2_SSD1306_128X64_NONAME_2_HW_I2C u8g2(U8G2_R0, OLED_CLOCK, OLED_DATA, OLED_RESET);
 U8G2_SSD1309_128X64_NONAME0_2_HW_I2C u8g2(U8G2_R0, OLED_CLOCK, OLED_DATA, OLED_RESET);
+
 RH_RF69 rf69(RFM69_CS, RFM69_INT);
 RHReliableDatagram rfManager(rf69, SERVER_ADDRESS);
 
@@ -20,6 +21,7 @@ bool programStatuses[8] = {0,0,0,0,0,0,0,0};
 bool previewStatuses[8] = {0,0,0,0,0,0,0,0};
 int8_t batteries[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
 unsigned long savedTime = 0;
+unsigned long displayRefreshTime = 0;
 uint8_t timeouts[8] = {0,0,0,0,0,0,0,0};
 
 bool statusChanged = false;
@@ -30,18 +32,18 @@ void sendTallyStatus(uint8_t to, uint8_t mode, uint8_t status) {
           status
   };
 
-  Serial.print("Sending to tally n: ");
+  Serial.print(F("Sending to tally n: "));
   Serial.print(to);
-  Serial.print(" value: ");
+  Serial.print(F(" value: "));
   Serial.println(status);
 
   if (!rfManager.sendtoWait(data, sizeof(data), to)) {
-    Serial.println("Send failed");
+    Serial.println(F("Send failed"));
     batteries[to - 1] = 0;
   }
 
   if(!rfManager.waitPacketSent(200)) {
-    Serial.println("Send failed: timeout");
+    Serial.println(F("Send failed: timeout"));
   }
 }
 
@@ -66,8 +68,9 @@ void readConfiguration() {
 }
 
 void setup() {
+  Wire.setClock(3400000);
   Serial.begin(9600);
-  while(!Serial) {}
+  //while(!Serial) {}
 
   readConfiguration();
 
@@ -89,9 +92,10 @@ void setup() {
     break;
   }
 
-  Serial.println("Init");
+  Serial.println(F("Init"));
 
   u8g2.begin();
+  u8g2.setFont(u8g2_font_t0_11_tf);
 
   pinMode(RFM69_RST, OUTPUT);
   digitalWrite(RFM69_RST, LOW);
@@ -136,7 +140,7 @@ void readAndUpdateStatuses(bool * statuses, bool * newStatuses, uint8_t mode) {
 
 void loop() {
   if (rfManager.available()) {
-    Serial.println("Message available");
+    Serial.println(F("Message available"));
     uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
     uint8_t len = sizeof(buf);
     uint8_t from;
@@ -192,13 +196,13 @@ void loop() {
   readAndUpdateStatuses(programStatuses, newProgramStatuses, TALLY_TYPE_PROGRAM);
   readAndUpdateStatuses(previewStatuses, newPreviewStatuses, TALLY_TYPE_PREVIEW);
 
-  if (statusChanged) {
-    Serial.println("Set monitor");
+
+  if (statusChanged && millis() - displayRefreshTime > 200) {
+    Serial.println(F("Set monitor"));
 
     u8g2.firstPage();
     do {
-      u8g2.setFont(u8g2_font_t0_11_tf);
-      
+
       uint8_t receiver = 0;
       while (receiver < 8) {
         uint8_t x = receiver > 3 ? 64 : 0;
@@ -228,7 +232,7 @@ void loop() {
         receiver++;
       }
     } while (u8g2.nextPage());
-
     statusChanged = false;
+    displayRefreshTime = millis();
   }
 }

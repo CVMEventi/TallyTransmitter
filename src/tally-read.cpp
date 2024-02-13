@@ -44,9 +44,9 @@ bool readFromSerial(bool * programStatuses, bool * previewStatuses) {
       return false;
   }
 
-  if (update.length() > 0) {
+  /*if (update.length() > 0) {
     Serial.println(update);
-  }
+  }*/
 
   /*if (!update.endsWith("\0") || update.length() != 4) {
     return false;
