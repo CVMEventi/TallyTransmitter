@@ -3,7 +3,7 @@
 /* Radio Setup */
 
 #define RF69_FREQ_1 865.0
-#define RF69_FREQ_2 867.2
+#define RF69_FREQ_2 866.2
 #define RFM69_CS 8
 #define RFM69_INT 7
 #define RFM69_RST 4
