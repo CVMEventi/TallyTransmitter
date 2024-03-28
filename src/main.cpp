@@ -8,8 +8,10 @@
 #include "tally-read.h"
 #include "Wire.h"
 
+#define DEBUG 0
+
 /* Devices Setup */
-U8G2_SSD1309_128X64_NONAME0_2_HW_I2C u8g2(U8G2_R0, OLED_CLOCK, OLED_DATA, OLED_RESET);
+U8X8_SSD1309_128X64_NONAME0_HW_I2C u8x8(OLED_RESET);
 
 RH_RF69 rf69(RFM69_CS, RFM69_INT);
 RHReliableDatagram rfManager(rf69, SERVER_ADDRESS);
@@ -17,12 +19,12 @@ RHReliableDatagram rfManager(rf69, SERVER_ADDRESS);
 uint8_t communicationMode = COMM_MODE_IO_PREVIEW_PROGRAM;
 uint8_t tallyPins[] = TALLY_PINS;
 float selectedFrequency = RF69_FREQ_1;
-bool programStatuses[8] = {0,0,0,0,0,0,0,0};
-bool previewStatuses[8] = {0,0,0,0,0,0,0,0};
-int8_t batteries[8] = {-1,-1,-1,-1,-1,-1,-1,-1};
+bool programStatuses[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+bool previewStatuses[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+int8_t batteries[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
 unsigned long savedTime = 0;
 unsigned long displayRefreshTime = 0;
-uint8_t timeouts[8] = {0,0,0,0,0,0,0,0};
+uint8_t timeouts[8] = {0, 0, 0, 0, 0, 0, 0, 0};
 
 bool statusChanged = false;
 
@@ -31,19 +33,24 @@ void sendTallyStatus(uint8_t to, uint8_t mode, uint8_t status) {
           mode,
           status
   };
-
+#if DEBUG
   Serial.print(F("Sending to tally n: "));
   Serial.print(to);
   Serial.print(F(" value: "));
   Serial.println(status);
+#endif
 
   if (!rfManager.sendtoWait(data, sizeof(data), to)) {
+#if DEBUG
     Serial.println(F("Send failed"));
+#endif
     batteries[to - 1] = 0;
   }
 
-  if(!rfManager.waitPacketSent(200)) {
+  if (!rfManager.waitPacketSent(200)) {
+#if DEBUG
     Serial.println(F("Send failed: timeout"));
+#endif
   }
 }
 
@@ -68,7 +75,7 @@ void readConfiguration() {
 }
 
 void setup() {
-  Wire.setClock(3400000);
+  Wire.setClock(400000);
   Serial.begin(9600);
   //while(!Serial) {}
 
@@ -76,26 +83,25 @@ void setup() {
 
   Serial.println(communicationMode);
 
-  switch (communicationMode)
-  {
-  case COMM_MODE_IO_PREVIEW_PROGRAM:
-  case COMM_MODE_IO_PROGRAM:
-    for (uint8_t pin : tallyPins) {
-      pinMode(pin, INPUT_PULLUP);
-    }
-    break;
-  case COMM_MODE_SERIAL:
-    Serial1.begin(9600);
-    break;
-  
-  default:
-    break;
+  switch (communicationMode) {
+    case COMM_MODE_IO_PREVIEW_PROGRAM:
+    case COMM_MODE_IO_PROGRAM:
+      for (uint8_t pin: tallyPins) {
+        pinMode(pin, INPUT_PULLUP);
+      }
+      break;
+    case COMM_MODE_SERIAL:
+      Serial1.begin(9600);
+      break;
+
+    default:
+      break;
   }
 
   Serial.println(F("Init"));
 
-  u8g2.begin();
-  u8g2.setFont(u8g2_font_t0_11_tf);
+  u8x8.begin();
+  u8x8.setFont(u8x8_font_chroma48medium8_r);
 
   pinMode(RFM69_RST, OUTPUT);
   digitalWrite(RFM69_RST, LOW);
@@ -123,7 +129,7 @@ void setup() {
   }
 }
 
-void readAndUpdateStatuses(bool * statuses, bool * newStatuses, uint8_t mode) {
+void readAndUpdateStatuses(bool *statuses, bool *newStatuses, uint8_t mode) {
   for (uint8_t index = 0; index < 8; index++) {
     uint8_t newPinValue = newStatuses[index];
     uint8_t oldPinValue = statuses[index];
@@ -173,7 +179,7 @@ void loop() {
         batteries[index] = -1;
 
         if (oldValue != batteries[index]) {
-            statusChanged = true;
+          statusChanged = true;
         }
       }
     }
@@ -197,41 +203,37 @@ void loop() {
   readAndUpdateStatuses(previewStatuses, newPreviewStatuses, TALLY_TYPE_PREVIEW);
 
 
-  if (statusChanged && millis() - displayRefreshTime > 200) {
+  if (statusChanged && millis() - displayRefreshTime > 100) {
+#if DEBUG
     Serial.println(F("Set monitor"));
+#endif
 
-    u8g2.firstPage();
-    do {
+    uint8_t receiver = 0;
+    while (receiver < 8) {
 
-      uint8_t receiver = 0;
-      while (receiver < 8) {
-        uint8_t x = receiver > 3 ? 64 : 0;
-        uint8_t y = receiver > 3 ? 12 * (receiver - 4) : 12 * receiver;
+      char title[11] = {};
+      char battery[4] = {};
+      dtostrf(batteries[receiver], 3, 0, battery);
 
-        char title[11] = {};
-        char battery[4] = {};
-        dtostrf(batteries[receiver], 3, 0, battery);
-
-        char statusChar = ' ';
-        if (programStatuses[receiver]) {
-            statusChar = 'P';
-        } else if (previewStatuses[receiver]) {
-            statusChar = 'w';
-        }
-
-        char formattedBattery[5] = {};
-
-        if (batteries[receiver] > 0) {
-          snprintf(formattedBattery, 5, "%s%%", battery);
-        } else {
-          snprintf(formattedBattery, 5, " OFF");
-        }
-
-        snprintf(title, 11, "T%d:%c %s", receiver + 1, statusChar, formattedBattery);
-        u8g2.drawStr(x, 28 + y, title);
-        receiver++;
+      char statusChar = ' ';
+      if (programStatuses[receiver]) {
+        statusChar = 'P';
+      } else if (previewStatuses[receiver]) {
+        statusChar = 'w';
       }
-    } while (u8g2.nextPage());
+
+      char formattedBattery[5] = {};
+
+      if (batteries[receiver] > 0) {
+        snprintf(formattedBattery, 5, "%s%%", battery);
+      } else {
+        snprintf(formattedBattery, 5, " OFF");
+      }
+
+      snprintf(title, 11, "T%d:%c %s", receiver + 1, statusChar, formattedBattery);
+      u8x8.drawString(0, receiver, title);
+      receiver++;
+    }
     statusChanged = false;
     displayRefreshTime = millis();
   }
