@@ -18,7 +18,7 @@
 
 #define SERVER_ADDRESS 120
 
-#define TALLY_PINS {A0, A1, A2, A3, A4, A5, 0, 1}
+#define TALLY_PINS {A0, 0, 1, A1, A2, A3, A4, A5}
 #define SERIAL_PINS {0, 1}
 
 /* DIP switches configuration */
